@@ -5,7 +5,7 @@ from Codes.Utilities import find_nearest
 import matplotlib.pyplot as plt
 import seaborn as sns
 import matplotlib as mtl
-# mtl.use("TKAgg")
+mtl.use("TKAgg")
 from pyimzml.ImzMLParser import _bisect_spectrum
 from scipy.signal import argrelextrema
 import pandas as pd
@@ -22,8 +22,8 @@ from sklearn.datasets import load_iris
 rng = np.random.RandomState(31337)
 
 if __name__ == '__main__':
-    fileDir = r'/media/banikr/DATA/MALDI/230713-Chen-intactproteins/'
-
+    # fileDir = r'/media/banikr/DATA/MALDI/230713-Chen-intactproteins/'
+    fileDir = r'C:\Data\MALDI\230713-Chen-intactproteins'
     savepath = os.path.join(fileDir, 'SavGolwl55po2BaseCorrdeg6max1000tol5XlocYlocRegID.h5')
     print(savepath)
     with h5py.File(savepath, 'r') as pfile:
@@ -35,11 +35,18 @@ if __name__ == '__main__':
         corRegID = np.array(pfile['corRegID'])
     meanSpec = np.mean(processedSpectra, axis=0)
     peakPositions = argrelextrema(meanSpec, np.greater)[0]
-    # processedSpectra = processedSpectra[:, peakPositions]
+    spectra = processedSpectra#[:, peakPositions]
     # print("peak selected spectra:", processedSpectra.shape)
-    peakmzs = mzs[peakPositions]
-    gmcsvDir = r'/media/banikr/DATA/MALDI/230713-Chen-intactproteins/GM_injured_cord1/'
-    wmcsvDir = r'/media/banikr/DATA/MALDI/230713-Chen-intactproteins/WM_injured_cord1/'
+    peakmzs = mzs#[peakPositions]
+    plt.plot(peakmzs, meanSpec, color="tab:green", label='mean')
+    plt.plot(peakmzs, spectra[500], color='tab:red', label='#500')
+    plt.legend()
+    plt.show()
+
+    # gmcsvDir = r'/media/banikr/DATA/MALDI/230713-Chen-intactproteins/GM_injured_cord1/'
+    gmcsvDir = os.path.join(fileDir, 'GM_injured_cord1')
+    # wmcsvDir = r'/media/banikr/DATA/MALDI/230713-Chen-intactproteins/WM_injured_cord1/'
+    wmcsvDir = os.path.join(fileDir, 'WM_injured_cord1')
 
     gm1csv = glob(os.path.join(gmcsvDir, '*1*spots.csv'))
     gm2csv = glob(os.path.join(gmcsvDir, '*2*spots.csv'))
@@ -75,7 +82,7 @@ if __name__ == '__main__':
     specIdx = []
     for df in dflist:
         specIdx.extend(df['Spot index'].values)
-    savecsv = os.path.join(fileDir, 'pca_umap_hdbscan_gmwm_labels.csv')
+    savecsv = os.path.join(fileDir, 'tic_poisson_pca90_umap_hdbscan_gmwm_labels.csv')
     labelDF = pd.read_csv(savecsv)
     labels = labelDF['labels'].values    # labels must start from 0 instead of 1
     print("labels: ", np.unique(labels))
@@ -92,15 +99,15 @@ if __name__ == '__main__':
     #         labels[i] = 1
     print("interchanged labels: ", np.unique(labels))
     labelImage = np.zeros([max(xCor)+1, max(yCor)+1])
-    tol = 150
-    ionImageSpectra = np.zeros([len(specIdx), len(peakPositions)])
-    ionImage3D = np.zeros([max(xCor)+1, max(yCor)+1, len(peakPositions)])
+    # tol = 150
+    # ionImageSpectra = np.zeros([len(specIdx), len(peakPositions)])
+    # ionImage3D = np.zeros([max(xCor)+1, max(yCor)+1, len(peakPositions)])
     for idx, spot in enumerate(specIdx):
-        ints = processedSpectra[spot]
-        for jdx, mz_value in enumerate(peakmzs):
-            min_i, max_i = _bisect_spectrum(mzs, mz_value, tol)
-            ionImageSpectra[idx, jdx] = sum(ints[min_i:max_i + 1])  # = array3D[xpos, ypos, jdx]
-        ionImage3D[xCor[spot], yCor[spot], :] = ionImageSpectra[idx]
+        # ints = processedSpectra[spot]
+        # for jdx, mz_value in enumerate(peakmzs):
+            # min_i, max_i = _bisect_spectrum(mzs, mz_value, tol)
+            # ionImageSpectra[idx, jdx] = sum(ints[min_i:max_i + 1])  # = array3D[xpos, ypos, jdx]
+        # ionImage3D[xCor[spot], yCor[spot], :] = ionImageSpectra[idx]
         labelImage[xCor[spot], yCor[spot]] = labels[idx]
     plt.imshow(labelImage[min(xCor):max(xCor)+1, min(yCor):max(yCor)+1])
     plt.colorbar()
@@ -118,7 +125,7 @@ if __name__ == '__main__':
     # col_stddevs = np.std(ionImageSpectra, axis=0)
     # # # Pareto scaling
     # ionImageSpectra = (ionImageSpectra - col_means) / np.sqrt(col_stddevs)
-    data = ionImageSpectra
+    data = spectra[specIdx]  #ionImageSpectra
     labels = labels - 1
     print("labels for XGBoost: ", np.unique(labels))
     spectraDF = pd.DataFrame(data=data,
@@ -233,7 +240,7 @@ if __name__ == '__main__':
     # print(f'Best: {grid_result.best_score_} using {grid_result.best_params_}','\n')
     xgb_model = XGBClassifier(
                               learning_rate=0.8,
-                              n_estimators=100,
+                              n_estimators=30, # 100
                               max_depth=4,
                               min_child_weight=1,
                               gamma=0.5,
@@ -252,7 +259,7 @@ if __name__ == '__main__':
                               n_jobs=1
                               )
     # class_names = {0: 'WM', 1: 'GM', 2: 'GM(inj)', 3: 'injured'}
-    class_names = {0: 'WM', 2: 'GM', 1: 'inj'}
+    class_names = {0: 'WM', 1: 'GM', 2: 'inj'}
     # class_names = {0: 'healthy', 1: 'between', 2: 'injured'}
     def fit_and_score(estimator, X_train, X_test, y_train, y_test):
         """Fit the estimator on the train set and score it on both sets"""
@@ -309,7 +316,7 @@ if __name__ == '__main__':
         # plt.show()
     # print("results >> \n", results)
     # class_labels = ['WM', 'GM', 'GM(inj)', 'injured']
-    class_labels = ['WM', 'inj', 'GM']
+    class_labels = ['WM', 'GM', 'inj']
     plot_confusion_matrix(xgb_model, X_test, y_test,
                           display_labels=class_labels, cmap='binary', colorbar=False)
     plt.show()
@@ -323,7 +330,7 @@ if __name__ == '__main__':
                       linestyles='solid', alpha=0.5)
     plt.vlines(peakmzs, 0, np.mean(shap_values[1], axis=0), label='gm', colors='g',
                       linestyles='solid', alpha=0.5)
-    plt.vlines(peakmzs, 0, np.mean(shap_values[2], axis=0), label='gm+', colors='b',
+    plt.vlines(peakmzs, 0, np.mean(shap_values[2], axis=0), label='inj', colors='b',
                       linestyles='solid', alpha=0.5)
     # plt.vlines(peakmzs, 0, np.mean(shap_values[3], axis=0), label='injured', colors='r',
     #                   linestyles='solid', alpha=0.5)
